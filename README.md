@@ -18,16 +18,6 @@ Fine-tuned DistilBERT transformer for classifying financial news sentiment — P
 - PyTorch
 - Streamlit
 
-## 🚀 Run Locally
-```bash
-git clone https://github.com/devdattachatterjee/financial-sentiment-analyzer
-cd financial-sentiment-analyzer
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
 ## 💡 How It Works
 1. User enters any financial headline
 2. DistilBERT tokenizer converts text to token IDs
@@ -35,7 +25,8 @@ streamlit run app.py
 4. Softmax converts raw logits to confidence probabilities
 5. App displays prediction with full confidence breakdown
 
+## 🎯 Why This Project
+Financial markets move on news. Being able to automatically classify whether a headline is bullish, bearish, or neutral at scale has direct applications in algorithmic trading, risk monitoring, and BFSI analytics — which is the domain I specialise in.
+
 ## 👤 Author
-**Devdatta Chatterjee**  
-PGP Data Science & AI/ML — Praxis Tech School, Kolkata  
-[GitHub](https://github.com/devdattachatterjee)
+Devdatta Chatterjee 
