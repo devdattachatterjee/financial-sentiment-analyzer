@@ -26,7 +26,15 @@ Fine-tuned DistilBERT transformer for classifying financial news sentiment — P
 5. App displays prediction with full confidence breakdown
 
 ## 🎯 Why This Project
-Financial markets move on news. Being able to automatically classify whether a headline is bullish, bearish, or neutral at scale has direct applications in algorithmic trading, risk monitoring, and BFSI analytics — which is the domain I specialise in.
+Financial markets move on news. When RBI announces a rate hike, when a company posts earnings, when a CEO resigns — stock prices react within seconds. Human analysts can't read thousands of headlines simultaneously. This model can process thousands of headlines per minute and flag negative signals automatically.
+
+**Algorithmic trading** — Sentiment signals used as input features for trading strategies. A spike in negative sentiment around a stock can trigger a short position automatically.
+
+**Credit risk monitoring** — Banks and NBFCs monitor news about borrowers continuously. Negative sentiment around a corporate borrower triggers early warnings in credit risk systems — directly complementing NPA forecasting models.
+
+**Portfolio management** — Asset managers track sentiment across sectors to rebalance before price corrections happen.
+
+This model is the foundation layer for all three use cases.
 
 ## 👤 Author
 Devdatta Chatterjee 
