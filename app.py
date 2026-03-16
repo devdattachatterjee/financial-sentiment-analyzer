@@ -11,8 +11,10 @@ st.divider()
 
 @st.cache_resource
 def load_model():
-    tokenizer = AutoTokenizer.from_pretrained("./financial_sentiment_model", use_fast=False)
-    model = AutoModelForSequenceClassification.from_pretrained("./financial_sentiment_model")
+    from transformers import DistilBertForSequenceClassification
+    
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    model = DistilBertForSequenceClassification.from_pretrained("Devda1421/financial-sentiment-distilbert")
     model.eval()
     return tokenizer, model
 tokenizer, model = load_model()
