@@ -1,5 +1,7 @@
 streamlit
-transformers
-torch
-plotly
-pandas
+langchain
+langchain-openai
+langchain-community
+faiss-cpu
+pypdf
+langchain-text-splitters
