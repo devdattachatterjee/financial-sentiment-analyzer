@@ -5,57 +5,77 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
 
-# --- Page Config ---
+# --- 1. Page Configuration ---
 st.set_page_config(page_title="Fin-Doc RAG Intelligence", page_icon="🏦", layout="wide")
 
-# --- 1. API Logic ---
-# This looks for the secret you put in the Streamlit Dashboard
+# Custom CSS for a professional look
+st.markdown("""
+    <style>
+    .stApp { background-color: #0e1117; color: #ffffff; }
+    [data-testid="stSidebar"] { background-color: #161b22; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 2. API Key & Model Setup ---
+# Checks Streamlit Secrets first, then sidebar input
 api_key = st.secrets.get("OPENAI_API_KEY") or st.sidebar.text_input("Enter OpenAI API Key", type="password")
 
 if api_key:
-    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
-    llm = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=api_key)
+    try:
+        embeddings = OpenAIEmbeddings(openai_api_key=api_key)
+        llm = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=api_key, temperature=0)
+        
+        # --- 3. Sidebar: Document Upload ---
+        st.sidebar.header("📁 Document Ingestion")
+        uploaded_file = st.sidebar.file_uploader("Upload Financial PDF (RBI/Annual Report)", type="pdf")
+        
+        if uploaded_file:
+            if "vector_db" not in st.session_state:
+                with st.status("🧠 Building Knowledge Base...", expanded=True) as status:
+                    # Save temporary file
+                    with open("temp.pdf", "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    
+                    st.write("Parsing document structure...")
+                    loader = PyPDFLoader("temp.pdf")
+                    docs = loader.load()
+                    
+                    st.write("Generating semantic chunks...")
+                    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+                    texts = splitter.split_documents(docs)
+                    
+                    st.write("Indexing vectors in FAISS...")
+                    st.session_state.vector_db = FAISS.from_documents(texts, embeddings)
+                    status.update(label="✅ Analysis Ready!", state="complete", expanded=False)
 
-    # --- 2. Document Ingestion ---
-    uploaded_file = st.sidebar.file_uploader("Upload Financial PDF", type="pdf")
-    
-    if uploaded_file:
-        if "vector_db" not in st.session_state:
-            with st.spinner("Processing Document..."):
-                with open("temp.pdf", "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                loader = PyPDFLoader("temp.pdf")
-                docs = loader.load()
-                splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-                texts = splitter.split_documents(docs)
-                st.session_state.vector_db = FAISS.from_documents(texts, embeddings)
-                st.success("✅ Knowledge Base Ready!")
+        # --- 4. Main Chat Interface ---
+        st.title("🤖 Financial Signal Assistant")
+        st.caption("Context-Aware Analysis of Regulatory and Corporate Filings")
 
-    # --- 3. Chat Interface ---
-    st.title("🤖 Financial Signal Assistant")
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        # Display Chat History
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Ask about the document..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        # Chat Input
+        if prompt := st.chat_input("Query the document (e.g., 'What is the GNPA percentage?')"):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        if "vector_db" in st.session_state:
-            with st.chat_message("assistant"):
-                # Use invoke instead of the old __call__ for LangChain v0.1+
-                qa_chain = RetrievalQA.from_chain_type(
-                    llm=llm, chain_type="stuff", 
-                    retriever=st.session_state.vector_db.as_retriever()
-                )
-                response = qa_chain.invoke(prompt)
-                st.markdown(response["result"])
-                st.session_state.messages.append({"role": "assistant", "content": response["result"]})
-        else:
-            st.error("Please upload a PDF first!")
-else:
-    st.warning("Please provide an OpenAI API Key to start.")
+            if "vector_db" in st.session_state:
+                with st.chat_message("assistant"):
+                    with st.spinner("Retrieving data..."):
+                        # RAG Chain
+                        qa_chain = RetrievalQA.from_chain_type(
+                            llm=llm,
+                            chain_type="stuff",
+                            retriever=st.session_state.vector_db.as_retriever(search_kwargs={"k": 3}),
+                            return_source_documents=True
+                        )
+                        # Updated LangChain 0.1+ syntax
+                        response = qa_chain.invoke({"query": prompt})
+                        answer = response["result"]
