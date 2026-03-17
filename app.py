@@ -8,119 +8,100 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Financial Sentiment Analyzer",
-    page_icon="📊",
+    page_icon="📈",
     layout="centered"
 )
 
-# --- Custom CSS for "Production-grade" Look ---
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f5f7f9;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #0e1117;
-        color: white;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- Model Loading (Cached) ---
-# Note: Using a standard financial-tuned DistilBERT from HuggingFace Hub
-MODEL_NAME = "mrm8488/distilbert-base-uncased-finetuned-financial-phrasebank"
+# --- Model Integration ---
+# Path to your specific Hugging Face model
+MODEL_PATH = "Devda1421/financial-sentiment-distilbert"
 
 @st.cache_resource
 def load_assets():
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
     return tokenizer, model
 
-tokenizer, model = load_assets()
+try:
+    tokenizer, model = load_assets()
+except Exception as e:
+    st.error(f"Failed to load model from {MODEL_PATH}. Ensure the repository is public.")
+    st.stop()
 
-# --- App Header ---
-st.title("📈 Financial Sentiment Analyzer")
-st.caption("Fine-tuned DistilBERT Transformer | PyTorch | Streamlit Cloud")
-st.info("Classifies financial news into 3-class sentiment (Positive / Negative / Neutral) with confidence scoring.")
+# --- UI Header ---
+st.title("💰 Financial Sentiment Analyzer")
+st.markdown(f"**Model Hub Path:** `{MODEL_PATH}`")
+st.info("Analyzing news headlines using your custom fine-tuned DistilBERT transformer.")
 
-# --- User Input Section ---
-with st.container():
-    user_input = st.text_area(
-        "Enter Financial Headline:", 
-        placeholder="e.g., Q3 profits exceeded expectations despite global supply chain pressures...",
-        height=100
-    )
-    
-    analyze_btn = st.button("Run Inference")
+# --- Inference Input ---
+user_input = st.text_area(
+    "Enter a financial headline or text segment:",
+    placeholder="e.g., The company's quarterly revenue exceeded analyst expectations...",
+    height=120
+)
 
-# --- Inference & Visualization Logic ---
-if analyze_btn:
+if st.button("Analyze Sentiment"):
     if not user_input.strip():
-        st.error("Please enter a headline to analyze.")
+        st.warning("Please enter text for analysis.")
     else:
-        with st.spinner("Processing through transformer layers..."):
-            # 1. Tokenization
-            inputs = tokenizer(user_input, return_tensors="pt", truncation=True, padding=True)
+        # 1. Tokenization
+        inputs = tokenizer(user_input, return_tensors="pt", truncation=True, padding=True)
 
-            # 2. Forward Pass
-            with torch.no_grad():
-                outputs = model(**inputs)
-                logits = outputs.logits
-            
-            # 3. Softmax for Confidence Scores
-            probs = F.softmax(logits, dim=1).squeeze().tolist()
-            labels = ["Negative", "Neutral", "Positive"]
-            
-            # Create Results DataFrame
-            df_results = pd.DataFrame({
-                "Sentiment": labels,
-                "Confidence": probs
-            })
-            
-            # Get top prediction
-            prediction = labels[torch.argmax(logits).item()]
-            confidence = max(probs)
+        # 2. Forward Pass (6-layer attention architecture)
+        with torch.no_grad():
+            outputs = model(**inputs)
+            logits = outputs.logits
+        
+        # 3. Softmax Confidence Scoring
+        probs = F.softmax(logits, dim=1).squeeze().tolist()
+        
+        # Label Mapping (Standard for Financial-Phrasebank fine-tuning)
+        # Note: Index 0: Negative, 1: Neutral, 2: Positive
+        labels = ["Negative", "Neutral", "Positive"]
+        prediction_idx = torch.argmax(logits).item()
+        prediction = labels[prediction_idx]
+        confidence = probs[prediction_idx]
 
-        # --- Display Results ---
+        # --- Visualizing Results ---
         st.divider()
         
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            st.metric("Predicted Sentiment", prediction)
-            st.metric("Confidence Score", f"{confidence:.2%}")
-            
-        with col2:
-            # Sentiment Distribution Bar Graph
-            fig = px.bar(
-                df_results, 
-                x='Sentiment', 
-                y='Confidence', 
-                color='Sentiment',
-                text_auto='.2%',
-                title="Confidence Distribution",
-                color_discrete_map={
-                    'Negative': '#d32f2f', 
-                    'Neutral': '#546e7a', 
-                    'Positive': '#388e3c'
-                }
-            )
-            fig.update_layout(
-                yaxis_range=[0, 1],
-                showlegend=False,
-                margin=dict(l=20, r=20, t=40, b=20),
-                height=300
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        # Display Summary Metrics
+        m1, m2 = st.columns(2)
+        m1.metric("Predicted Sentiment", prediction)
+        m2.metric("Confidence", f"{confidence:.2%}")
 
-# --- Sidebar Documentation ---
-st.sidebar.header("Project Technical Specs")
-st.sidebar.markdown(f"""
-- **Model:** `DistilBERT-base-uncased`
-- **Params:** 67 Million
-- **Accuracy:** 85%+ (on Financial Phrasebank)
-- **Pipeline:** Tokenization → 6-layer attention → Softmax
-""")
-          
+        # Dataframe for the Bar Graph
+        df_results = pd.DataFrame({
+            "Sentiment": labels,
+            "Probability": probs
+        })
+
+        # Sentiment Distribution Plot
+        fig = px.bar(
+            df_results, 
+            x='Sentiment', 
+            y='Probability', 
+            color='Sentiment',
+            text_auto='.2%',
+            title="Softmax Probability Distribution",
+            color_discrete_map={
+                'Negative': '#e53935', 
+                'Neutral': '#78909c', 
+                'Positive': '#43a047'
+            }
+        )
+        
+        fig.update_layout(
+            yaxis_range=[0, 1],
+            showlegend=False,
+            height=350,
+            margin=dict(l=20, r=20, t=50, b=20)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# --- Sidebar Technical Stats ---
+st.sidebar.title("System Info")
+st.sidebar.write(f"**Architecture:** DistilBERT")
+st.sidebar.write(f"**Model ID:** {MODEL_PATH}")
+st.sidebar.write(f"**Deployment:** Streamlit Cloud")
