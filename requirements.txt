@@ -1,11 +1,6 @@
-# Machine Learning & Local Inference
-torch
-transformers
-tf-keras
-numpy
-
-# Web Interface & Data Handling
 streamlit
+transformers
+torch
+numpy
 pandas
-openpyxl
 plotly
