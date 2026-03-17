@@ -5,20 +5,19 @@ import torch.nn.functional as F
 import plotly.express as px
 import pandas as pd
 
-# --- UI Setup ---
+# --- Page Configuration ---
 st.set_page_config(page_title="Fin-Intelligence NLP", page_icon="📈", layout="wide")
 
-# Custom CSS for a professional look
+# Custom CSS for a clean, professional dashboard look
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 Financial Sentiment & Signal Intelligence")
-st.markdown("Fine-tuned **DistilBERT** Transformers for High-Precision Financial Analysis · Built by **Devdatta Chatterjee**")
-
+# --- 1. Model Loading ---
 @st.cache_resource
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
@@ -27,93 +26,104 @@ def load_model():
     return tokenizer, model
 
 tokenizer, model = load_model()
-label_names = ["Negative", "Positive", "Neutral"]
 label_map = {0: "Negative 🔴", 1: "Positive 🟢", 2: "Neutral ⚪"}
+label_names = ["Negative", "Positive", "Neutral"]
 
-# --- Sidebar: Technical Stats ---
+# --- 2. Title & Intro ---
+st.title("📊 Financial Sentiment & Signal Intelligence")
+st.markdown("Fine-tuned **DistilBERT** Transformers for High-Precision Financial Analysis · Built by **Devdatta Chatterjee**")
+st.divider()
+
+# --- 3. Sidebar Configuration ---
 with st.sidebar:
     st.header("🛠️ Model Architecture")
     st.info("**Base:** DistilBERT-uncased")
-    st.info("**Fine-tuned on:** Financial PhraseBank Dataset")
-    st.info("**Framework:** PyTorch & HuggingFace")
+    st.info("**Fine-tuned on:** Financial PhraseBank")
+    st.info("**Optimization:** Softmax Normalization")
     st.divider()
-    st.markdown("### How it works")
-    st.caption("Unlike generic NLP, this model understands financial context (e.g., 'crude oil spike' vs 'interest rate cut').")
+    st.markdown("### Decision Logic")
+    st.caption("This engine identifies market sentiment shifts by analyzing linguistic nuances in corporate reporting and financial news.")
 
-# --- Main Layout ---
+# --- 4. Main UI Layout ---
 col_left, col_right = st.columns([1, 1], gap="large")
 
 with col_left:
-    st.subheader("📝 Headline Input")
+    st.subheader("📝 News Headline Input")
     
-    # Quick Examples
-    st.caption("Quick Load Examples:")
-    ex_col1, ex_col2, ex_col3 = st.columns(3)
-    if ex_col1.button("📈 Bullish", use_container_width=True):
-        st.session_state["headline"] = "Reliance Industries beats quarterly estimates, EBITDA margins expand by 200bps"
-    if ex_col2.button("📉 Bearish", use_container_width=True):
-        st.session_state["headline"] = "Regulatory crackdown on fintech giants leads to significant market sell-off"
-    if ex_col3.button("📰 Neutral", use_container_width=True):
-        st.session_state["headline"] = "RBI maintains repo rate at 6.5%, focus remains on withdrawal of accommodation"
+    # Example buttons to trigger session state
+    st.caption("Quick Test Scenarios:")
+    ex_c1, ex_c2, ex_c3 = st.columns(3)
+    if ex_c1.button("📈 Bullish", use_container_width=True):
+        st.session_state["headline"] = "HDFC Bank net profit jumps 30% YoY, asset quality remains robust"
+    if ex_c2.button("📉 Bearish", use_container_width=True):
+        st.session_state["headline"] = "Tech stocks plummet as global central banks hint at prolonged high interest rates"
+    if ex_c3.button("📰 Neutral", use_container_width=True):
+        st.session_state["headline"] = "Standard & Poor's affirms India's sovereign rating with stable outlook"
 
-    headline = st.text_area(
-        "Financial Context:",
+    # Input Area
+    input_text = st.text_area(
+        "Enter financial text for analysis:",
         value=st.session_state.get("headline", ""),
-        height=150,
-        placeholder="Paste a news headline or corporate statement here..."
+        height=180,
+        placeholder="Paste a news headline, quarterly result summary, or market update..."
     )
     
-    analyze = st.button("🚀 Analyze Signal Strength", type="primary", use_container_width=True)
+    analyze_btn = st.button("🔍 Run Signal Analysis", type="primary", use_container_width=True)
 
 with col_right:
     st.subheader("🎯 Analysis Output")
     
-    if analyze and headline:
-        with st.spinner("Processing deep-learning layers..."):
-            inputs = tokenizer(headline, return_tensors="pt", padding=True, truncation=True, max_length=128)
+    # Logic to trigger only when button is pressed
+    if analyze_btn and input_text:
+        with st.spinner("Executing Transformer layers..."):
+            # Tokenization
+            inputs = tokenizer(input_text, return_tensors="pt", padding=True, truncation=True, max_length=128)
+            
+            # Inference
             with torch.no_grad():
                 outputs = model(**inputs)
             
-            probs = F.softmax(outputs.logits, dim=-1)[0]
-            pred_idx = torch.argmax(probs).item()
-            confidence = probs[pred_idx].item()
+            # Probability Calculation
+            probs = F.softmax(outputs.logits, dim=-1)[0].tolist()
+            pred_idx = probs.index(max(probs))
+            confidence = probs[pred_idx]
             
-            # KPI Cards
-            res_1, res_2 = st.columns(2)
-            res_1.metric("Market Sentiment", label_map[pred_idx])
-            res_2.metric("Signal Confidence", f"{confidence*100:.1f}%")
+            # Result Display - Metric Cards
+            m_col1, m_col2 = st.columns(2)
+            m_col1.metric("Market Sentiment", label_map[pred_idx])
+            m_col2.metric("Signal Confidence", f"{confidence*100:.1f}%")
             
-            # Probability Chart
+            # Result Display - Visualization
             prob_df = pd.DataFrame({
-                'Label': ["Negative", "Positive", "Neutral"],
-                'Probability': [float(p) for p in probs]
+                'Sentiment': label_names,
+                'Probability': probs
             })
             
-            fig = px.bar(prob_df, x='Label', y='Probability', 
-                         color='Label', 
-                         color_discrete_map={'Positive':'#00CC96','Negative':'#EF553B','Neutral':'#636EFA'},
-                         text_auto='.2%')
-            fig.update_layout(showlegend=False, height=300, margin=dict(t=20, b=20, l=0, r=0))
+            fig = px.bar(
+                prob_df, 
+                x='Sentiment', 
+                y='Probability', 
+                color='Sentiment',
+                color_discrete_map={'Positive':'#00CC96','Negative':'#EF553B','Neutral':'#636EFA'},
+                text_auto='.2%'
+            )
+            fig.update_layout(showlegend=False, height=350, margin=dict(t=10, b=10, l=0, r=0))
             st.plotly_chart(fig, use_container_width=True)
             
-    elif analyze and not headline:
-        st.warning("Please enter a headline to begin analysis.")
+    elif analyze_btn and not input_text:
+        st.warning("⚠️ Please provide input text to analyze.")
     else:
-        st.info("Awaiting input for real-time inference.")
+        st.info("💡 **Awaiting Signal:** Enter a headline in the left panel and click 'Run Signal Analysis' to see deep-learning insights.")
 
-# --- Bottom Section: Why this model? ---
+# --- 5. Footer / Technical Context ---
 st.divider()
-st.subheader("📈 Signal Explained")
-exp_col1, exp_col2, exp_col3 = st.columns(3)
-
-with exp_col1:
-    st.markdown("**Context Awareness**")
-    st.caption("DistilBERT captures long-range dependencies in text, understanding that the subject and object of a sentence determine the financial impact.")
-
-with exp_col2:
-    st.markdown("**Stochastic Optimization**")
-    st.caption("Softmax normalization provides a probabilistic confidence score, allowing for threshold-based trading signal generation.")
-
-with exp_col3:
-    st.markdown("**Biotech-Ready**")
-    st.caption("Can be extended to analyze clinical trial results or FDA approval news—bridging the gap between Biology and Finance.")
+f1, f2, f3 = st.columns(3)
+with f1:
+    st.markdown("**Transfer Learning**")
+    st.caption("Leverages DistilBERT's pre-trained linguistic knowledge, specifically fine-tuned for the unique vocabulary of global financial markets.")
+with f2:
+    st.markdown("**Real-time Inference**")
+    st.caption("Optimized PyTorch backend allows for sub-second sentiment scoring, suitable for high-frequency news monitoring pipelines.")
+with f3:
+    st.markdown("**Biotech Applicability**")
+    st.caption("Architecture is modular—capable of being re-tuned for Pharma-specific news, clinical trial outcomes, and healthcare regulatory filings.")
