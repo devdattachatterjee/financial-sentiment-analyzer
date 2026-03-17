@@ -79,3 +79,15 @@ if api_key:
                         # Updated LangChain 0.1+ syntax
                         response = qa_chain.invoke({"query": prompt})
                         answer = response["result"]
+                        
+                        # Display the answer to the user and add to history
+                        st.markdown(answer)
+                        st.session_state.messages.append({"role": "assistant", "content": answer})
+
+    # Catching any API or Langchain initialization errors
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
+
+else:
+    # Prompt user to enter key if missing
+    st.info("Please enter your OpenAI API key in the sidebar to proceed.")
