@@ -1,103 +1,126 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
-import plotly.express as px # Added for a cleaner bar chart
-import warnings
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-warnings.filterwarnings('ignore')
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="Financial Sentiment Analyzer",
+    page_icon="📊",
+    layout="centered"
+)
 
-# --- Page Config ---
-st.set_page_config(page_title="Financial Sentiment Dashboard", layout="wide")
+# --- Custom CSS for "Production-grade" Look ---
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f5f7f9;
+    }
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
+        height: 3em;
+        background-color: #0e1117;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- Model Loading (Cached) ---
+# Note: Using a standard financial-tuned DistilBERT from HuggingFace Hub
+MODEL_NAME = "mrm8488/distilbert-base-uncased-finetuned-financial-phrasebank"
 
 @st.cache_resource
-def load_local_model():
-    # Specific financial model - no API key needed
-    model_name = "ahmedrachid/FinancialBERT-Sentiment-Analysis"
-    device = 0 if torch.cuda.is_available() else -1
+def load_assets():
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+    return tokenizer, model
+
+tokenizer, model = load_assets()
+
+# --- App Header ---
+st.title("📈 Financial Sentiment Analyzer")
+st.caption("Fine-tuned DistilBERT Transformer | PyTorch | Streamlit Cloud")
+st.info("Classifies financial news into 3-class sentiment (Positive / Negative / Neutral) with confidence scoring.")
+
+# --- User Input Section ---
+with st.container():
+    user_input = st.text_area(
+        "Enter Financial Headline:", 
+        placeholder="e.g., Q3 profits exceeded expectations despite global supply chain pressures...",
+        height=100
+    )
     
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    
-    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=device)
+    analyze_btn = st.button("Run Inference")
 
-analyzer = load_local_model()
-
-st.title("📈 Financial Sentiment Analysis Dashboard")
-st.markdown("Upload a CSV/Excel file or paste text to analyze sentiment using a local **FinancialBERT** model.")
-
-# --- Sidebar for Uploads ---
-st.sidebar.header("Data Source")
-uploaded_file = st.sidebar.file_uploader("Upload Financial Data (CSV or XLSX)", type=["csv", "xlsx"])
-column_to_analyze = None
-
-if uploaded_file:
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
+# --- Inference & Visualization Logic ---
+if analyze_btn:
+    if not user_input.strip():
+        st.error("Please enter a headline to analyze.")
     else:
-        df = pd.read_excel(uploaded_file)
-    
-    st.sidebar.write("Preview of Data:")
-    st.sidebar.dataframe(df.head(3))
-    
-    column_to_analyze = st.sidebar.selectbox("Select the column containing text:", df.columns)
+        with st.spinner("Processing through transformer layers..."):
+            # 1. Tokenization
+            inputs = tokenizer(user_input, return_tensors="pt", truncation=True, padding=True)
 
-# --- Main Logic ---
-user_text = st.text_area("Or paste text manually (one statement per line):", height=150)
-
-if st.button("Run Full Analysis"):
-    statements = []
-    
-    # Decide source of data
-    if uploaded_file is not None and column_to_analyze:
-        statements = df[column_to_analyze].fillna("").astype(str).tolist()
-    elif user_text.strip():
-        statements = [line.strip() for line in user_text.split('\n') if line.strip()]
-    
-    if statements:
-        with st.spinner(f"Analyzing {len(statements)} statements on GPU..."):
-            # Local Inference
-            results = analyzer(statements)
+            # 2. Forward Pass
+            with torch.no_grad():
+                outputs = model(**inputs)
+                logits = outputs.logits
             
-            # Process Results
-            processed_data = []
-            counts = {"positive": 0, "neutral": 0, "negative": 0}
+            # 3. Softmax for Confidence Scores
+            probs = F.softmax(logits, dim=1).squeeze().tolist()
+            labels = ["Negative", "Neutral", "Positive"]
             
-            for text, res in zip(statements, results):
-                label = res['label'].lower()
-                counts[label] += 1
-                processed_data.append({
-                    "Text": text,
-                    "Sentiment": label.capitalize(),
-                    "Score": res['score']
-                })
+            # Create Results DataFrame
+            df_results = pd.DataFrame({
+                "Sentiment": labels,
+                "Confidence": probs
+            })
             
-            res_df = pd.DataFrame(processed_data)
+            # Get top prediction
+            prediction = labels[torch.argmax(logits).item()]
+            confidence = max(probs)
 
-            # --- Visuals ---
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Statements", len(statements))
-            col2.metric("Positive %", f"{(counts['positive']/len(statements))*100:.1f}%")
-            col3.metric("Negative %", f"{(counts['negative']/len(statements))*100:.1f}%")
-
-            # The Bar Graph Comparison
-            st.subheader("Sentiment Distribution")
+        # --- Display Results ---
+        st.divider()
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.metric("Predicted Sentiment", prediction)
+            st.metric("Confidence Score", f"{confidence:.2%}")
+            
+        with col2:
+            # Sentiment Distribution Bar Graph
             fig = px.bar(
-                x=list(counts.keys()), 
-                y=list(counts.values()),
-                labels={'x': 'Sentiment Category', 'y': 'Number of Statements'},
-                color=list(counts.keys()),
-                color_discrete_map={'positive': '#2ecc71', 'neutral': '#f1c40f', 'negative': '#e74c3c'}
+                df_results, 
+                x='Sentiment', 
+                y='Confidence', 
+                color='Sentiment',
+                text_auto='.2%',
+                title="Confidence Distribution",
+                color_discrete_map={
+                    'Negative': '#d32f2f', 
+                    'Neutral': '#546e7a', 
+                    'Positive': '#388e3c'
+                }
+            )
+            fig.update_layout(
+                yaxis_range=[0, 1],
+                showlegend=False,
+                margin=dict(l=20, r=20, t=40, b=20),
+                height=300
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Table Output
-            st.subheader("Detailed Results")
-            st.dataframe(res_df, use_container_width=True)
-            
-            # Download Results
-            csv = res_df.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Results as CSV", csv, "sentiment_results.csv", "text/csv")
-            
-    else:
-        st.error("Please provide data via upload or text box.")
+# --- Sidebar Documentation ---
+st.sidebar.header("Project Technical Specs")
+st.sidebar.markdown(f"""
+- **Model:** `DistilBERT-base-uncased`
+- **Params:** 67 Million
+- **Accuracy:** 85%+ (on Financial Phrasebank)
+- **Pipeline:** Tokenization → 6-layer attention → Softmax
+""")
+          
