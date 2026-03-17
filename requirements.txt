@@ -1,5 +1,11 @@
-streamlit
-openai
-pandas
-plotly
+# Machine Learning & Local Inference
 torch
+transformers
+tf-keras
+numpy
+
+# Web Interface & Data Handling
+streamlit
+pandas
+openpyxl
+plotly
